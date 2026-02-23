@@ -30,6 +30,7 @@ from dataclasses import replace
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, NoReturn
 
+from guppylang_internals.tracing.util import hide_trace
 from typing_extensions import assert_never
 
 from guppylang_internals.ast_util import (
@@ -161,9 +162,12 @@ from guppylang_internals.tys.ty import (
     unify,
 )
 from guppylang_internals.tys.var import ExistentialVar
+from guppylang_internals.engine import ENGINE
+
 
 if TYPE_CHECKING:
     from guppylang_internals.diagnostic import SubDiagnostic
+
 
 # Mapping from unary AST op to dunder method and display name
 unary_table: dict[type[ast.unaryop], tuple[str, str]] = {
@@ -504,7 +508,8 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
     def visit_Attribute(self, node: ast.Attribute) -> tuple[ast.expr, Type]:
         from guppylang.defs import GuppyDefinition
 
-        from guppylang_internals.engine import ENGINE
+        # TODO: NICOLA clear this stuff
+        # from guppylang_internals.engine import ENGINE
 
         # A `value.attr` attribute access. Unfortunately, the `attr` is just a string,
         # not an AST node, so we have to compute its span by hand. This is fine since
@@ -867,6 +872,72 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
 
         raise GuppyError(IllegalComptimeExpressionError(node.value, type(python_val)))
 
+    def visit_MatchCasePattern(self, node: MatchCasePattern) -> tuple[ast.expr, Type]:
+        # TODO: NICOLA(3)
+        subj_node, subj_ty = self.synthesize(node.subject)
+        patt_node, patt_type = self.synthesize(node.pattern)
+
+        # raise InternalGuppyError(
+        #     "BB contains `MatchCasePattern`. Should have been removed during CFG "
+        #     f"construction: `{ast.unparse(node)}`"
+        # )
+
+        # Check if subj_ty and patt_type are the same
+        # if subj_ty != patt_type:
+        #     raise GuppyTypeError(
+        #         TypeMismatchError(node.pattern, subj_ty, patt_type, "pattern")
+        #     )
+
+        return node, bool_type()
+
+    def visit_MatchClass(self, node: ast.MatchClass) -> tuple[ast.expr, Type]:
+        # from guppylang_internals.engine import ENGINE
+
+
+        print("patterns: ", node.patterns)  # noqa: T201
+        print("kwd_attrs: ", node.kwd_attrs)  # noqa: T201
+        print("kwd_patterns: ", node.kwd_patterns)  # noqa: T201
+
+        node.cls, cls_ty = self.synthesize(node.cls)
+        print("cls: ", node.cls)  # noqa: T201
+        print("cls_ty: ", cls_ty)  # noqa: T201
+
+        if isinstance(node.cls, GlobalName):
+            defn = ENGINE.get_parsed(node.cls.def_id)
+            print("defn: ", defn)  # noqa: T201
+            # TODO: NICOLA check that we have a constructor
+
+            print("----")  # noqa: T201
+            return node, cls_ty  # TODO: NICOLA
+
+        # TODO: NICOLA Are we sure we can have only functions here?
+        raise GuppyError(ExpectedError(node.cls, "pattern class", "a function"))
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> tuple[ast.expr, Type]:
+        """'''
+            match x:
+                case [x] as y:
+                    ...
+                case _:
+                    ...
+            '''
+
+        Module(body=[
+            Match(
+                subject=Name(id='x', ctx=Load()),
+                cases=[
+                    match_case(
+                        pattern=MatchAs(
+                            pattern=MatchSequence(patterns=[MatchAs(name='x')]), name='y'),
+                        body=[Expr(value=Constant(value=Ellipsis))]),
+                    match_case(
+                        pattern=MatchAs(),
+                        body=[Expr(value=Constant(value=Ellipsis))])])])
+
+        """  # noqa: E501, W291
+
+    # TODO: NICOLA
+
     def visit_NamedExpr(self, node: ast.NamedExpr) -> tuple[ast.expr, Type]:
         raise InternalGuppyError(
             "BB contains `NamedExpr`. Should have been removed during CFG"
@@ -883,13 +954,6 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
         raise InternalGuppyError(
             "BB contains `IfExp`. Should have been removed during CFG construction: "
             f"`{ast.unparse(node)}`"
-        )
-
-    def visit_MatchCasePattern(self, node: MatchCasePattern) -> tuple[ast.expr, Type]:
-        # TODO: NICOLA(3)
-        raise InternalGuppyError(
-            "BB contains `MatchCasePattern`. Should have been removed during CFG "
-            f"construction: `{ast.unparse(node)}`"
         )
 
     def generic_visit(self, node: ast.expr) -> NoReturn:
