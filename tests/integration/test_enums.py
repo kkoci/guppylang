@@ -258,20 +258,20 @@ def test_higher_order(validate):
         factory(Enum.VariantA, 42)
 
     validate(main.compile_function())
-    
+
 
 def test_tuple_unpacking_variants(validate):
     @guppy.enum
     class TupleEnum:
-        A, B = {}, {}  # noqa: RUF012
+        A, B = {}, {}
 
     @guppy.enum
     class TupleEnumWithFields:
-        Left, Right = {"x": int}, {"y": float}  # noqa: RUF012
-        
-    @guppy
-    def method(self) -> None:
-        pass
+        Left, Right = {"x": int}, {"y": float}
+
+        @guppy
+        def method(self) -> None:
+            pass
 
     @guppy
     def main() -> None:

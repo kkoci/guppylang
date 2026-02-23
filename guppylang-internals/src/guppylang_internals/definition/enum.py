@@ -112,7 +112,7 @@ class RawEnumDef(TypeDef, ParsableDef):
                 # Enum variant are declared via dictionary, where key are the variant
                 # fields and values are types;
                 # e.g. `variant = {"a": int, ...}
-                
+
                 # Multi-target assignments like `a = b = {...}` are not supported
                 case _, ast.Assign(targets=[_, _, *_]) as node:
                     raise GuppyError(UnsupportedError(node, "Multi assignments"))
@@ -127,7 +127,8 @@ class RawEnumDef(TypeDef, ParsableDef):
                     isinstance(t, ast.Name) and isinstance(v, ast.Dict)
                     for t, v in zip(target_names, dict_values, strict=True)
                 ):
-                    for target_name_node, dict_node in zip(target_names, dict_values, strict=True):
+                    for target_name_node, dict_node in zip(target_names, dict_values,
+                                                           strict=True):
                         assert isinstance(target_name_node, ast.Name)  # for mypy
                         assert isinstance(dict_node, ast.Dict)  # for mypy
                         variant_name = target_name_node.id
