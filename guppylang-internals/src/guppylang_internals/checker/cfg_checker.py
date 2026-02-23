@@ -84,13 +84,13 @@ def check_cfg(
     *places* rather than just variables.
     """
     # First, we need to run program analysis
-    # TODO: NICOLA(1) From here we also need to integrate the match
     ass_before = {v.name for v in inputs}
     inout_vars = [v for v in inputs if InputFlags.Inout in v.flags]
     cfg.analyze(ass_before, ass_before, [v.name for v in inout_vars])
 
     # We start by compiling the entry BB
     checked_cfg: CheckedCFG[Variable] = CheckedCFG([v.ty for v in inputs], return_ty)
+    # TODO: NICOLA(1) From here we also need to integrate the match
     checked_cfg.entry_bb = check_bb(
         cfg.entry_bb, checked_cfg, inputs, return_ty, generic_params, globals
     )

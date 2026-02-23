@@ -114,6 +114,7 @@ from guppylang_internals.nodes import (
     IterNext,
     LocalCall,
     MakeIter,
+    MatchCasePattern,
     PartialApply,
     PlaceNode,
     SubscriptAccessAndDrop,
@@ -882,6 +883,13 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
         raise InternalGuppyError(
             "BB contains `IfExp`. Should have been removed during CFG construction: "
             f"`{ast.unparse(node)}`"
+        )
+
+    def visit_MatchCasePattern(self, node: MatchCasePattern) -> tuple[ast.expr, Type]:
+        # TODO: NICOLA(3)
+        raise InternalGuppyError(
+            "BB contains `MatchCasePattern`. Should have been removed during CFG "
+            f"construction: `{ast.unparse(node)}`"
         )
 
     def generic_visit(self, node: ast.expr) -> NoReturn:
