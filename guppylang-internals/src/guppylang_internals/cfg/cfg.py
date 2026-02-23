@@ -126,14 +126,13 @@ class CFG(BaseCFG[BB]):
             stats, def_ass_before, maybe_ass_before, include_unreachable=True
         ).run_unpacked(self.bbs)
         return stats
-    
 
     def cfg_as_string(self) -> str:
-        """Returns information about each reachable BB in BFS order starting from entry_bb as a string."""
+        """Returns information about each reachable BB in BFS order
+        starting from entry_bb as a string."""
         queue = deque([self.entry_bb])
         visited = set()
         lines = []
-        print('here')
         while queue:
             bb = queue.popleft()
             if bb in visited:

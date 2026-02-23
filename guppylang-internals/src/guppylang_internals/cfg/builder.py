@@ -1,6 +1,5 @@
 import ast
 import copy
-from hmac import new
 import itertools
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -41,13 +40,13 @@ from guppylang_internals.nodes import (
     DesugaredListComp,
     IterNext,
     MakeIter,
+    MatchCasePattern,
     ModifiedBlock,
     Modifier,
     NestedFunctionDef,
     Power,
 )
 from guppylang_internals.span import Span, to_span
-from guppylang_internals.tracing.util import hide_trace
 from guppylang_internals.tys.ty import NoneType, UnitaryFlags
 
 # In order to build expressions, need an endless stream of unique temporary variables
@@ -100,7 +99,6 @@ class CFGBuilder(AstVisitor[BB | None]):
         final_bb = self.visit_stmts(
             nodes, self.cfg.entry_bb, Jumps(self.cfg.exit_bb, None, None)
         )
-
         # Compute reachable BBs
         self.cfg.update_reachable()
 
@@ -130,6 +128,7 @@ class CFGBuilder(AstVisitor[BB | None]):
                     pred.dummy_successors.remove(bb)
                 bb.dummy_predecessors = []
 
+        print(self.cfg.cfg_as_string())
         return self.cfg
 
     def visit_stmts(self, nodes: list[ast.stmt], bb: BB, jumps: Jumps) -> BB | None:
@@ -347,30 +346,33 @@ class CFGBuilder(AstVisitor[BB | None]):
         bb.statements.append(new_node)
         return bb
 
-    @hide_trace
     def visit_Match(self, node: ast.Match, bb: BB, jumps: Jumps) -> BB | None:
-        # case_bb, continue_bb = self.cfg.new_bb(), self.cfg.new_bb()
-        subject_node = node.subject
-        # BranchBuilder.add_branch(subject_node, self.cfg, bb, case_bb, continue_bb)
         # Valid match statements must have at least one case
-        # assert len(node.cases) > 0
-        # case_bb = self.visit_stmts(node.cases[0].body, case_bb, jumps)
+        assert len(node.cases) > 0
 
+        subject_node = node.subject
+        assert bb is not None
         case_bbs = []
         root_bb = bb
         for node_case in node.cases:
             case_bb = self.cfg.new_bb()
             continue_bb = self.cfg.new_bb()
-            #TODO: NICOLA We need to manipolate the subject node
+            pattern = node_case.pattern
+            match_pattern = MatchCasePattern(pattern, subject_node)
             BranchBuilder.add_branch(
-                subject_node, self.cfg, root_bb, case_bb, continue_bb
+                match_pattern, self.cfg, root_bb, case_bb, continue_bb
             )
             case_bb = self.visit_stmts(node_case.body, case_bb, jumps)
+            if case_bb is not None:
+                case_bbs.append(case_bb)
             root_bb = continue_bb
-        
-        print(self.cfg.cfg_as_string())
-        # print(ast.dump(node, indent=2))
-        raise NotImplementedError("Aaaaaaa")
+
+        # We do at least one for iteration, continue_bb is always defined.
+        case_bbs.append(continue_bb)
+
+        # I'm assuming that the cases can be not exhaustive.
+        # If they are exhaustive, the last continue_bb is not reachable.
+        return self.cfg.new_bb(*case_bbs)
 
     def _handle_withitem(self, node: ast.withitem) -> Modifier:
         # Check that `as` notation is not used

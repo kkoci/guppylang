@@ -397,6 +397,7 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
         """
         if ty := get_type_opt(node):
             return node, ty
+        # TODO: we need to visit case guards
         node, ty = self.visit(node)
         if ty.unsolved_vars and not allow_free_vars:
             raise GuppyError(TypeInferenceError(node, ty))

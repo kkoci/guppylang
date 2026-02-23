@@ -843,3 +843,40 @@ class CheckedModifiedBlock(ast.With):
 
     def has_power(self) -> bool:
         return len(self.power) > 0
+
+
+# TODO: NICOLA, is this really necessary?
+class MatchSubject(ast.expr):
+    """A Node representing the subject of a match statement."""
+
+    subject: ast.expr
+
+    _fields = ("subject",)
+
+    def __init__(self, subject: ast.expr) -> None:
+        super().__init__(**subject.__dict__)
+        self.subject = subject
+
+    # See MakeIter for explanation
+    __reduce__ = object.__reduce__
+    __reduce_ex__ = object.__reduce_ex__
+
+
+class MatchCasePattern(ast.expr):
+    """A Node representing the condition of one case in the match statement."""
+
+    pattern: ast.pattern
+    subject: ast.expr
+
+    _fields = ("pattern", "subject")
+
+    def __init__(self, pattern: ast.pattern, subject: ast.expr) -> None:
+        # TODO: NICOLA, I save the parent in the super for error reporting purposes,
+        # but all the checking and errors should be personalised for the match
+        super().__init__(**pattern.__dict__)
+        self.pattern = pattern
+        self.subject = subject
+
+    # See MakeIter for explanation
+    __reduce__ = object.__reduce__
+    __reduce_ex__ = object.__reduce_ex__
