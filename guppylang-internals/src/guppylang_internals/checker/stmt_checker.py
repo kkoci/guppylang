@@ -457,6 +457,9 @@ class StmtChecker(AstVisitor[BBStatement]):
     def visit_Continue(self, node: ast.Continue) -> None:
         raise InternalGuppyError("Control-flow statement should not be present here.")
 
+    def visit_Match(self, node: ast.Match) -> None:
+        raise InternalGuppyError("Control-flow statement should not be present here.")
+
 
 T = TypeVar("T")
 

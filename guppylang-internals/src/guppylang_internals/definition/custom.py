@@ -210,6 +210,7 @@ class CustomFunctionDef(CompiledCallableDef):
     higher_order_func_id: GlobalConstId
     has_signature: bool
     has_var_args: bool = field(default=False)
+    is_constructor: bool = field(default=False)
 
     description: str = field(default="function", init=False)
 
