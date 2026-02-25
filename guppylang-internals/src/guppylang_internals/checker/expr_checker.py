@@ -1042,15 +1042,18 @@ def check_type_against(
     # Otherwise, we know that `act` has no unsolved type vars, so unification is trivial
     assert not act.unsolved_vars
     subst = unify(exp, act, {})
-    if subst is None and isinstance(
-        node,
-        ast.expr,  # MARK NICOLA: if we are checking a pattern, we cannot do futher
-    ):
+    if subst is None:
         # Maybe we can implicitly coerce `act` to `exp`
-        if coerced := try_coerce_to(act, exp, node, ctx):
+        if (
+            isinstance(
+                node,
+                ast.expr,  # MARK NICOLA: if we are checking a pattern, we cannot do futher, try_coerce will be useless  # noqa: E501
+            )
+            and (coerced := try_coerce_to(act, exp, node, ctx))
+        ):
             return cast("NodeT", coerced), {}, []
         raise GuppyTypeError(TypeMismatchError(node, exp, act, kind))
-    return node, subst or {}, []
+    return node, subst, []
 
 
 def try_coerce_to(
