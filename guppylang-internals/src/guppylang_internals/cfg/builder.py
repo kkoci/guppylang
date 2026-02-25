@@ -67,7 +67,7 @@ class Jumps(NamedTuple):
     break_bb: BB | None
 
 
-# TODO: NICOLA improve this
+# TODO Nicola: Not used anymore, remove?
 @dataclass(frozen=True)
 class UnreachableError(Error):
     title: ClassVar[str] = "Unreachable"
@@ -355,12 +355,15 @@ class CFGBuilder(AstVisitor[BB | None]):
         case_bbs = []
         root_bb = bb
         for node_case in node.cases:
-            check_match_supported(node_case)
             pattern = node_case.pattern
             case_bb = self.cfg.new_bb()
             continue_bb = self.cfg.new_bb()
             # We check if we are in a catch-all case,
             if isinstance(pattern, ast.MatchAs):
+                if pattern.pattern is not None or pattern.name is not None:
+                    raise GuppyError(
+                        UnsupportedError(pattern, "This pattern", singular=True)
+                    )
                 # if yes we do not need to branch, thus we create a branch under
                 # an always true condition (the add_branch will do all the magic)
                 BranchBuilder.add_branch(
@@ -798,20 +801,3 @@ def make_assign(lhs: list[ast.AST], value: ast.expr) -> ast.Assign:
             ast.Tuple(elts=lhs, ctx=ast.Store()),  # type: ignore[arg-type]
         )
     return with_loc(value, ast.Assign(targets=[target], value=value))  # type: ignore[list-item]
-
-
-def check_match_supported(node: ast.match_case) -> None:
-    """Checks if the given `ast.Match` node uses any unsupported features, and raises an
-    error if it does."""
-    # To improve while we add more features.
-    match node.pattern:
-        case (
-            ast.MatchValue() | ast.MatchAs(pattern=None) | ast.MatchClass(kwd_attrs=[])
-        ):
-            if node.guard is not None:
-                raise GuppyError(
-                    UnsupportedError(node.guard, "Guards in match cases", singular=True)
-                )
-            return
-
-    raise GuppyError(UnsupportedError(node.pattern, "THIS pattern", singular=True))

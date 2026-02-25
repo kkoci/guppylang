@@ -13,6 +13,7 @@ from guppylang_internals.nodes import (
     DesugaredGenerator,
     DesugaredGeneratorExpr,
     DesugaredListComp,
+    MatchCasePattern,
     ModifiedBlock,
     NestedFunctionDef,
 )
@@ -97,7 +98,8 @@ class BB(ABC):
         for s in self.statements:
             visitor.visit(s)
         if self.branch_pred is not None:
-            # TODO: NICOLA(OK) Check this for match statements as well
+            # TODO: NICOLA(F) Check this for match statements as well.
+            # Not needed now, since we are not considering field acess
             visitor.visit(self.branch_pred)
         self._vars = visitor.stats
         return visitor.stats
@@ -240,3 +242,15 @@ class VariableVisitor(ast.NodeVisitor):
             for x, using_bb in live[node.cfg.entry_bb].items()
             if x not in assigned_before_in_bb
         }
+
+    def visit_MatchCasePattern(self, node: MatchCasePattern) -> None:
+        # Since there are no variables bound in match patterns for now,
+        # we can just visit the subject to mark the variables used in it.
+        # TODO: NICOLa
+        self.visit(node.subject)
+
+    def visit_MatchClass(self, node: ast.MatchClass) -> None:
+        pass  # TODO: NICOLa (not needed now)
+
+    def visit_MatchAs(self, node: ast.MatchAs) -> None:
+        pass  # TODO: NICOLa (not needed now)

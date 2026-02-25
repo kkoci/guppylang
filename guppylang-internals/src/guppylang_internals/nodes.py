@@ -845,7 +845,7 @@ class CheckedModifiedBlock(ast.With):
         return len(self.power) > 0
 
 
-# TODO: NICOLA, is this really necessary?
+# TODO: NICOLa, is this really necessary?
 class MatchSubject(ast.expr):
     """A Node representing the subject of a match statement."""
 
@@ -871,9 +871,10 @@ class MatchCasePattern(ast.expr):
     _fields = ("pattern", "subject")
 
     def __init__(self, pattern: ast.pattern, subject: ast.expr) -> None:
-        # TODO: NICOLA, I save the parent in the super for error reporting purposes,
+        # TODO: NICOLa, I save the parent in the super for error reporting purposes,
         # but all the checking and errors should be personalised for the match
-        super().__init__(**pattern.__dict__)
+        # If you need this define the missing method manually refering to pattern
+        super().__init__()
         self.pattern = pattern
         self.subject = subject
 

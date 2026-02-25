@@ -28,9 +28,8 @@ from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import replace
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn, TypeVar, cast
 
-from guppylang_internals.tracing.util import hide_trace
 from typing_extensions import assert_never
 
 from guppylang_internals.ast_util import (
@@ -94,6 +93,7 @@ from guppylang_internals.definition.common import Definition
 from guppylang_internals.definition.parameter import ParamDef
 from guppylang_internals.definition.ty import TypeDef
 from guppylang_internals.definition.value import CallableDef, ValueDef
+from guppylang_internals.engine import ENGINE
 from guppylang_internals.error import (
     GuppyError,
     GuppyTypeError,
@@ -162,12 +162,9 @@ from guppylang_internals.tys.ty import (
     unify,
 )
 from guppylang_internals.tys.var import ExistentialVar
-from guppylang_internals.engine import ENGINE
-
 
 if TYPE_CHECKING:
     from guppylang_internals.diagnostic import SubDiagnostic
-
 
 # Mapping from unary AST op to dunder method and display name
 unary_table: dict[type[ast.unaryop], tuple[str, str]] = {
@@ -199,6 +196,9 @@ binary_table: dict[type[AstOp], tuple[str, str, str]] = {
     ast.Gt:       ("__gt__",       "__lt__",        ">"),
     ast.GtE:      ("__ge__",       "__le__",        ">="),
 }  # fmt: skip
+
+
+NodeT = TypeVar("NodeT", bound=ast.expr | ast.pattern)
 
 
 class ExprChecker(AstVisitor[tuple[ast.expr, Subst]]):
@@ -402,7 +402,6 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
         """
         if ty := get_type_opt(node):
             return node, ty
-        # TODO: we need to visit case guards
         node, ty = self.visit(node)
         if ty.unsolved_vars and not allow_free_vars:
             raise GuppyError(TypeInferenceError(node, ty))
@@ -508,7 +507,7 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
     def visit_Attribute(self, node: ast.Attribute) -> tuple[ast.expr, Type]:
         from guppylang.defs import GuppyDefinition
 
-        # TODO: NICOLA clear this stuff
+        # TODO: NICOLa clear this stuff
         # from guppylang_internals.engine import ENGINE
 
         # A `value.attr` attribute access. Unfortunately, the `attr` is just a string,
@@ -874,69 +873,11 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
 
     def visit_MatchCasePattern(self, node: MatchCasePattern) -> tuple[ast.expr, Type]:
         # TODO: NICOLA(3)
-        subj_node, subj_ty = self.synthesize(node.subject)
-        patt_node, patt_type = self.synthesize(node.pattern)
-
-        # raise InternalGuppyError(
-        #     "BB contains `MatchCasePattern`. Should have been removed during CFG "
-        #     f"construction: `{ast.unparse(node)}`"
-        # )
-
-        # Check if subj_ty and patt_type are the same
-        # if subj_ty != patt_type:
-        #     raise GuppyTypeError(
-        #         TypeMismatchError(node.pattern, subj_ty, patt_type, "pattern")
-        #     )
+        node.subject, subj_ty = self.synthesize(node.subject)
+        node.pattern, subst = PatternChecker(self.ctx).check(node.pattern, subj_ty)
+        print(f"Pattern subst: {subst}")  # noqa: T201
 
         return node, bool_type()
-
-    def visit_MatchClass(self, node: ast.MatchClass) -> tuple[ast.expr, Type]:
-        # from guppylang_internals.engine import ENGINE
-
-
-        print("patterns: ", node.patterns)  # noqa: T201
-        print("kwd_attrs: ", node.kwd_attrs)  # noqa: T201
-        print("kwd_patterns: ", node.kwd_patterns)  # noqa: T201
-
-        node.cls, cls_ty = self.synthesize(node.cls)
-        print("cls: ", node.cls)  # noqa: T201
-        print("cls_ty: ", cls_ty)  # noqa: T201
-
-        if isinstance(node.cls, GlobalName):
-            defn = ENGINE.get_parsed(node.cls.def_id)
-            print("defn: ", defn)  # noqa: T201
-            # TODO: NICOLA check that we have a constructor
-
-            print("----")  # noqa: T201
-            return node, cls_ty  # TODO: NICOLA
-
-        # TODO: NICOLA Are we sure we can have only functions here?
-        raise GuppyError(ExpectedError(node.cls, "pattern class", "a function"))
-
-    def visit_MatchAs(self, node: ast.MatchAs) -> tuple[ast.expr, Type]:
-        """'''
-            match x:
-                case [x] as y:
-                    ...
-                case _:
-                    ...
-            '''
-
-        Module(body=[
-            Match(
-                subject=Name(id='x', ctx=Load()),
-                cases=[
-                    match_case(
-                        pattern=MatchAs(
-                            pattern=MatchSequence(patterns=[MatchAs(name='x')]), name='y'),
-                        body=[Expr(value=Constant(value=Ellipsis))]),
-                    match_case(
-                        pattern=MatchAs(),
-                        body=[Expr(value=Constant(value=Ellipsis))])])])
-
-        """  # noqa: E501, W291
-
-    # TODO: NICOLA
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> tuple[ast.expr, Type]:
         raise InternalGuppyError(
@@ -961,9 +902,105 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
         raise GuppyError(UnsupportedError(node, "This expression", singular=True))
 
 
+class PatternChecker(AstVisitor[tuple[ast.pattern, Subst]]):
+    ctx: Context
+
+    def __init__(self, ctx: Context) -> None:
+        self.ctx = ctx
+
+    def check(self, pattern: ast.pattern, given_ty: Type) -> tuple[ast.pattern, Subst]:
+        """Checks a pattern against a given type."""
+        expr, subst = self.visit(pattern, given_ty)
+        return with_type(given_ty.substitute(subst), expr), subst
+
+    def _synthesize_type(self, node: ast.expr, ty: Type, value_expceted: bool) -> Type:
+        from guppylang_internals.definition.custom import CustomFunctionDef
+
+        # If we have a fuction call we need to check that is a constructor
+        got = ""
+        if isinstance(ty, FunctionType):
+            got = "a function call"
+            if isinstance(node, GlobalName):
+                defn = ENGINE.get_parsed(node.def_id)
+                if isinstance(defn, CustomFunctionDef) and defn.is_constructor:
+                    return ty.output
+        elif value_expceted:
+            # if we are visiting a MatchValue pattern, we can also accept a value,
+            # thus we return the type of the value
+            return ty
+
+        raise GuppyTypeError(ExpectedError(node, "a value or a class", got))
+
+    def visit_MatchValue(
+        self, node: ast.MatchValue, given_ty: Type
+    ) -> tuple[ast.pattern, Subst]:
+        node.value, val_ty = ExprSynthesizer(self.ctx).synthesize(node.value)
+        node_ty = self._synthesize_type(node.value, val_ty, True)
+        """TODO: Nicola see if needed
+        Check if subj_ty and patt_type are the same.
+        if not _is_type_compatible(patt_ty, given_ty):
+            raise GuppyTypeError(
+                TypeMismatchError(node, given_ty, patt_ty, "pattern")
+            )
+
+        return node, {}"""
+
+        node, subst, inst = check_type_against(
+            node_ty, given_ty, node, self.ctx, "pattern"
+        )
+        assert inst == [], "Patter values are not generic"
+        return node, subst
+
+    def visit_MatchClass(
+        self, node: ast.MatchClass, given_ty: Type
+    ) -> tuple[ast.pattern, Subst]:
+        node.cls, cls_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
+        node_ty = self._synthesize_type(node.cls, cls_ty, False)
+
+        node, subst, inst = check_type_against(
+            node_ty, given_ty, node, self.ctx, "pattern"
+        )
+        assert inst == [], "Patter values are not generic"
+
+        if len(node.patterns) > 0:
+            # We are considering `case Class(1,2,..)`.
+            # We need to check the constructor call.
+            # From the prevous step, we know that `cls_ty` is a function type
+            assert isinstance(cls_ty, FunctionType)
+
+            check_num_args(len(cls_ty.inputs), len(node.patterns), node)
+
+            for patt_arg, input_ty in zip(node.patterns, cls_ty.inputs, strict=True):
+                patt_arg, s = self.visit(patt_arg, input_ty.ty)
+                subst |= s
+
+                print(patt_arg, input_ty)
+
+        return node, subst
+
+    def visit_MatchAs(self, node: ast.MatchAs, given_ty: Type) -> NoReturn:
+        # case _ had already been handled during CFG construction,
+        # we may have MatchAs pattern inside another pattern (for name binding)
+        # e.g case Class(x): -> pattern=MatchClass(..., patterns=MatchAs(name='x'))
+        if node.pattern is not None or node.name is not None:
+            self.generic_visit(node, given_ty)
+        else:
+            raise InternalGuppyError(
+                "Empty wildcard should have been processed during cfg building"
+            )
+
+    def generic_visit(self, node: ast.pattern, given_ty: Type) -> NoReturn:
+        """Called if no explicit visitor function exists for a node."""
+        raise GuppyError(UnsupportedError(node, "This pattern", singular=True))
+
+
 def check_type_against(
-    act: Type, exp: Type, node: ast.expr, ctx: Context, kind: str = "expression"
-) -> tuple[ast.expr, Subst, Inst]:
+    act: Type,
+    exp: Type,
+    node: NodeT,
+    ctx: Context,
+    kind: str = "expression",
+) -> tuple[NodeT, Subst, Inst]:
     """Checks a type against another type.
 
     Returns a substitution for the free variables the expected type and an instantiation
@@ -1005,12 +1042,15 @@ def check_type_against(
     # Otherwise, we know that `act` has no unsolved type vars, so unification is trivial
     assert not act.unsolved_vars
     subst = unify(exp, act, {})
-    if subst is None:
+    if subst is None and isinstance(
+        node,
+        ast.expr,  # MARK NICOLA: if we are checking a pattern, we cannot do futher
+    ):
         # Maybe we can implicitly coerce `act` to `exp`
         if coerced := try_coerce_to(act, exp, node, ctx):
-            return coerced, {}, []
+            return cast("NodeT", coerced), {}, []
         raise GuppyTypeError(TypeMismatchError(node, exp, act, kind))
-    return node, subst, []
+    return node, subst or {}, []
 
 
 def try_coerce_to(
@@ -1067,7 +1107,15 @@ def check_type_apply(ty: FunctionType, node: ast.Subscript, ctx: Context) -> Ins
 def check_num_args(
     exp: int, act: int, node: AstNode, sig: FunctionType | None = None
 ) -> None:
-    """Checks that the correct number of arguments have been passed to a function."""
+    """Checks that the correct number of arguments have been passed to a function.
+
+    Args:
+        exp (int): The expected number of arguments.
+        act (int): The actual number of arguments provided.
+        node (AstNode): The function call AST node.
+        sig (FunctionType | None, optional): The function signature.
+
+    """
     if exp == act:
         return
     span, detailed = to_span(node), False
@@ -1583,3 +1631,27 @@ def _python_list_to_guppy_type(
             raise GuppyError(ComptimeExprIncoherentListError(node))
         el_ty = el_ty.substitute(subst)
     return frozenarray_type(el_ty, len(vs))
+
+
+# TODO: Move outside of `ExprSynthesizer`, do we need this? Not used anymore
+def _is_type_compatible(patt_type: Type, subj_type: Type) -> bool:
+    """Check if a pattern type is compatible with a subject type.
+
+    This allows matching generic types (like Enum[T]) against concrete
+    instantiations (like Enum[int]).
+    """
+    # Exact match
+    if patt_type == subj_type:
+        return True
+
+    # Check if one is a generic version of the other
+    # This handles cases like Enum[T] matching Enum[int]
+    return (
+        isinstance(patt_type, OpaqueType)
+        and isinstance(subj_type, OpaqueType)
+        and (
+            hasattr(patt_type, "args")
+            and hasattr(subj_type, "args")
+            and patt_type.defn == subj_type.defn
+        )
+    )

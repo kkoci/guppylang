@@ -2,36 +2,43 @@
 
 
 ```java
-pattern = MatchValue(expr value)
-        | MatchSingleton(constant value)
-        | MatchSequence(pattern* patterns)
-        | MatchMapping(expr* keys, pattern* patterns, identifier? rest)
-        | MatchClass(expr cls, pattern* patterns, identifier* kwd_attrs, pattern* kwd_patterns)
 
-        | MatchStar(identifier? name)
-        // The optional "rest" MatchMapping parameter handles capturing extra mapping keys
+MatchCasePattern(pattern: pattern, subject: expr)
 
-        | MatchAs(pattern? pattern, identifier? name)
-        | MatchOr(pattern* patterns)
+```java
+pattern =
+    MatchValue(value: expr)
+    | MatchClass(cls: expr, patterns: pattern*, kwd_attrs: identifier*, kwd_patterns: pattern*)
+    | MatchAs(pattern: pattern?, name: identifier?)
+    
+    | MatchSingleton(value: constant)
+    | MatchSequence(patterns: pattern*)
+    | MatchMapping(keys: expr*, patterns: pattern*, rest: identifier?)
+    | MatchStar(name: identifier?)
+    // The optional "rest" MatchMapping parameter handles capturing extra mapping keys
+    | MatchOr(patterns: pattern*)
 ```
 
 
 ### Pattern Examples
 
 ```python
-# MatchValue
-    case 42:        # OK
-    case ClassName: # OK
+# MatchAs - MatchAs()
+    case _:                # OK (B, C)
 
-# MatchAs without binding
-    case _:                # OK
+# MatchValue - MatchValue(expr value)
+    case 42:               # OK (B, C)
+    case EnumName.Variant: # OK (B, C)
 
-# MatchClass
-    case Point()      # OK
-    case Point(3, 4): # NO FOR NOW
+
+# MatchClass - MatchClass(expr cls, pattern* patterns) 
+    case Point.Variant()      # OK (B)
+    case Point(3, 4): # OK (B)
+
+# MatchClass - MatchClass(expr cls, pattern* patterns, identifier* kwd_attrs, pattern* kwd_patterns)
+    case Point(x, y): # NO FOR NOW
     case Point(x=3, y=4): # NO FOR NOW
     case Point(x=A, y=B) # NO FOR NOW
-
 
 # MatchSingleton
     case None: # NO FOR NOW
@@ -141,8 +148,8 @@ def main(north: Direction, x:int) -> None:
             x = 66
         case Class() as var: # ERROR: match-as not supported
             x = 55
-        case Point(x, y): # Error: value must be constants
-            z = 44
+        case Point(...). # ERROR: wrong type/wrong number of args
+            x = 44
 
 
 @guppy
@@ -162,6 +169,11 @@ def main(north: Enum[int], x:int) -> None:
 ```
 
 ## TODO CHECKs 
+
+```python
+        case Point(x, y): # Error: value must be constants
+            z = 44
+```
 
 
 ### Unreachable patterns
