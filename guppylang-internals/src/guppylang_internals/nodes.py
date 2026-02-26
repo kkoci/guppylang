@@ -874,7 +874,7 @@ class MatchCasePattern(ast.expr):
         # TODO: NICOLa, I save the parent in the super for error reporting purposes,
         # but all the checking and errors should be personalised for the match
         # If you need this define the missing method manually refering to pattern
-        super().__init__()
+        super().__init__(**pattern.__dict__)
         self.pattern = pattern
         self.subject = subject
 

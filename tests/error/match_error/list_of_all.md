@@ -28,15 +28,14 @@ pattern =
 
 # MatchValue - MatchValue(expr value)
     case 42:               # OK (B, C)
-    case EnumName.Variant: # OK (B, C)
 
 
 # MatchClass - MatchClass(expr cls, pattern* patterns) 
-    case Point.Variant()      # OK (B)
-    case Point(3, 4): # OK (B)
+    case Point.Variant(_, _)      # OK (B,C)
+    case Point.Variant(3, 4): # OK (B, C)
 
 # MatchClass - MatchClass(expr cls, pattern* patterns, identifier* kwd_attrs, pattern* kwd_patterns)
-    case Point(x, y): # NO FOR NOW
+    case EnumName.Point(x, y): # NO FOR NOW
     case Point(x=3, y=4): # NO FOR NOW
     case Point(x=A, y=B) # NO FOR NOW
 
