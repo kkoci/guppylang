@@ -115,7 +115,7 @@ from guppylang_internals.nodes import (
     IterNext,
     LocalCall,
     MakeIter,
-    MatchCasePattern,
+    MatchPred,
     PartialApply,
     PlaceNode,
     SubscriptAccessAndDrop,
@@ -868,7 +868,7 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
 
         raise GuppyError(IllegalComptimeExpressionError(node.value, type(python_val)))
 
-    def visit_MatchCasePattern(self, node: MatchCasePattern) -> tuple[ast.expr, Type]:
+    def visit_MatchCasePattern(self, node: MatchPred) -> tuple[ast.expr, Type]:
         # TODO: NICOLA(3)
         node.subject, subj_ty = self.synthesize(node.subject)
         node.pattern = PatternChecker(self.ctx).check(node.pattern, subj_ty)
@@ -977,13 +977,15 @@ class PatternChecker(AstVisitor[ast.pattern]):
         if node.pattern is not None or node.name is not None:
             self.generic_visit(node, given_ty)
         else:
-            raise InternalGuppyError(
-                "Empty wildcard should have been processed during cfg building"
-            )
+            raise InternalGuppyError("TODOOOOOOOO")
 
     def generic_visit(self, node: ast.pattern, given_ty: Type) -> NoReturn:
         """Called if no explicit visitor function exists for a node."""
-        raise GuppyError(UnsupportedError(node, "This pattern", singular=True))
+        raise InternalGuppyError(
+            "BB contains a not supported pattern. "
+            "A GuppyError should have been raised during CFG construction: "
+            f"`{ast.unparse(node)}`"
+        )
 
 
 def check_type_against(
@@ -1620,27 +1622,3 @@ def _python_list_to_guppy_type(
             raise GuppyError(ComptimeExprIncoherentListError(node))
         el_ty = el_ty.substitute(subst)
     return frozenarray_type(el_ty, len(vs))
-
-
-# TODO: Move outside of `ExprSynthesizer`, do we need this? Not used anymore
-def _is_type_compatible(patt_type: Type, subj_type: Type) -> bool:
-    """Check if a pattern type is compatible with a subject type.
-
-    This allows matching generic types (like Enum[T]) against concrete
-    instantiations (like Enum[int]).
-    """
-    # Exact match
-    if patt_type == subj_type:
-        return True
-
-    # Check if one is a generic version of the other
-    # This handles cases like Enum[T] matching Enum[int]
-    return (
-        isinstance(patt_type, OpaqueType)
-        and isinstance(subj_type, OpaqueType)
-        and (
-            hasattr(patt_type, "args")
-            and hasattr(subj_type, "args")
-            and patt_type.defn == subj_type.defn
-        )
-    )

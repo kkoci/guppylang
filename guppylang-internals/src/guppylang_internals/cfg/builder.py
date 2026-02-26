@@ -3,7 +3,7 @@ import copy
 import itertools
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import ClassVar, NamedTuple
+from typing import ClassVar, NamedTuple, NoReturn
 
 from guppylang_internals.ast_util import (
     AstVisitor,
@@ -40,7 +40,7 @@ from guppylang_internals.nodes import (
     DesugaredListComp,
     IterNext,
     MakeIter,
-    MatchCasePattern,
+    MatchPred,
     ModifiedBlock,
     Modifier,
     NestedFunctionDef,
@@ -350,49 +350,46 @@ class CFGBuilder(AstVisitor[BB | None]):
         # Valid match statements must have at least one case
         assert len(node.cases) > 0
 
-        subject_node = node.subject
-        assert bb is not None
         case_bbs = []
-        root_bb = bb
+        pattern_nodes = []
+        node.subject, bb = ExprBuilder.build(node.subject, self.cfg, bb)
+        match_pred = MatchPred(node, node.subject, pattern_nodes)
+        bb.branch_pred = match_pred
         for node_case in node.cases:
-            pattern = node_case.pattern
+            node_case.pattern, bb = PatternBuilder(self.cfg).visit(
+                node_case.pattern, bb
+            )
+            if node_case.guard is not None:
+                raise GuppyError(
+                    UnsupportedError(node_case.guard, "Guarded patterns", singular=True)
+                )
             case_bb = self.cfg.new_bb()
-            continue_bb = self.cfg.new_bb()
-            # We check if we are in a catch-all case,
-            if isinstance(pattern, ast.MatchAs):
-                if pattern.pattern is not None or pattern.name is not None:
-                    raise GuppyError(
-                        UnsupportedError(pattern, "This pattern", singular=True)
-                    )
-                # if yes we do not need to branch, thus we create a branch under
-                # an always true condition (the add_branch will do all the magic)
-                BranchBuilder.add_branch(
-                    ast.parse("True", mode="eval").body,
-                    self.cfg,
-                    root_bb,
-                    case_bb,
-                    continue_bb,
-                )
-            else:
-                match_pattern = MatchCasePattern(pattern, subject_node)
-                BranchBuilder.add_branch(
-                    match_pattern, self.cfg, root_bb, case_bb, continue_bb
-                )
+            self.cfg.link(bb, case_bb)
             case_bb = self.visit_stmts(node_case.body, case_bb, jumps)
-            root_bb = continue_bb
-
+            pattern_nodes.append(node_case.pattern)
             if case_bb is not None:
                 case_bbs.append(case_bb)
 
+        # We check if we are in a catch-all case,
+        # if isinstance(pattern, ast.MatchAs) and (
+        #     pattern.pattern is not None or pattern.name is not None
+        # ):
+        #     raise GuppyError(UnsupportedError(pattern, "This pattern", singular=True))
         # If we exit after a catch all match, we do not have a continue_bb,
         # otherwise we have it.
-        # I'm assuming that the cases can be not exhaustive.
-        # If they are exhaustive, the last continue_bb is always not reachable.
-        # continue_bb is always defined, since we do at least one iteration
-        case_bbs.append(continue_bb)
+
+        # Assuming that the cases can be not exhaustive,
+        # we may need an 'we have done nothing' BB.
+        # However, if we have a catch-all case, we do not need it.
+        if not isinstance(node.cases[-1].pattern, ast.MatchAs):
+            else_bb = self.cfg.new_bb()
+            self.cfg.link(bb, else_bb)
+            case_bbs.append(else_bb)
 
         if len(case_bbs) == 0:
+            # All the bodies are returning
             return None
+
         return self.cfg.new_bb(*case_bbs)
 
     def _handle_withitem(self, node: ast.withitem) -> Modifier:
@@ -669,6 +666,37 @@ class BranchBuilder(AstVisitor[None]):
         bb.branch_pred = pred
         self.cfg.link(bb, false_bb)
         self.cfg.link(bb, true_bb)
+
+
+class PatternBuilder(AstVisitor[ast.pattern, BB]):
+    cfg: CFG
+
+    def __init__(self, cfg: CFG) -> None:
+        self.cfg = cfg
+
+    def visit_MatchAs(self, node: ast.MatchAs, bb: BB) -> tuple[ast.pattern, BB]:
+        # Name binding is not supported in patterns,
+        # we only support the wildcard pattern `_`
+        if node.name is not None:
+            self.generic_visit(node, bb)
+        return node, bb
+
+    def visit_MatchValue(self, node: ast.MatchValue, bb: BB) -> tuple[ast.pattern, BB]:
+        node.value, bb = ExprBuilder.build(node.value, self.cfg, bb)
+
+        return node, bb
+
+    def visit_MatchClass(self, node: ast.MatchClass, bb: BB) -> tuple[ast.pattern, BB]:
+        node.cls, bb = ExprBuilder.build(node.cls, self.cfg, bb)
+
+        for patt_arg in node.patterns:
+            patt_arg, bb = self.visit(patt_arg, bb)
+
+        return node, bb
+
+    def generic_visit(self, node: ast.pattern, bb: BB) -> NoReturn:
+        """Called if no explicit visitor function exists for a node."""
+        raise GuppyError(UnsupportedError(node, "This pattern", singular=True))
 
 
 def desugar_comprehension(

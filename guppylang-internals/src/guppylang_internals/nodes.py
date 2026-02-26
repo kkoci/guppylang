@@ -862,20 +862,23 @@ class MatchSubject(ast.expr):
     __reduce_ex__ = object.__reduce_ex__
 
 
-class MatchCasePattern(ast.expr):
+class MatchPred(ast.expr):
     """A Node representing the condition of one case in the match statement."""
 
-    pattern: ast.pattern
+    match_node: ast.stmt  # TODO: NICOLa, see if we need this
     subject: ast.expr
+    patterns: list[ast.pattern]
 
-    _fields = ("pattern", "subject")
+    _fields = ("patterns", "subject")
 
-    def __init__(self, pattern: ast.pattern, subject: ast.expr) -> None:
+    def __init__(
+        self, match_node: ast.stmt, subject: ast.expr, patterns: list[ast.pattern]
+    ) -> None:
         # TODO: NICOLa, I save the parent in the super for error reporting purposes,
         # but all the checking and errors should be personalised for the match
         # If you need this define the missing method manually refering to pattern
-        super().__init__(**pattern.__dict__)
-        self.pattern = pattern
+        super().__init__(**match_node.__dict__)
+        self.patterns = patterns
         self.subject = subject
 
     # See MakeIter for explanation
