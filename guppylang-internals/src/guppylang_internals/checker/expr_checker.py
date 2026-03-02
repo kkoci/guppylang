@@ -980,7 +980,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
                 subst = unify(value_ty, given_ty, {})
                 if subst is None:
                     raise GuppyTypeError(
-                        TypeMismatchError(node, given_ty, value_ty, "pattern")
+                        TypeMismatchError(node, given_ty, value_ty, "pattern TODOO5")
                     )
 
                 if attr not in value_ty.variant_as_dict:
@@ -1009,7 +1009,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
                 if class_def.id != given_ty.defn.id:
                     _, node_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
                     raise GuppyTypeError(
-                        TypeMismatchError(node, node_ty, given_ty, "pattern")
+                        TypeMismatchError(node, node_ty, given_ty, "pattern TODOO5")
                     )
 
                 assert isinstance(given_ty, StructType)
@@ -1028,23 +1028,23 @@ class PatternChecker(AstVisitor[ast.pattern]):
                     ExpectedError(node, "a value or a class (TODO ERROR3)")
                 )
 
-        node.cls, cls_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
-        node_ty = self._synthesize_type(node.cls, cls_ty, False)
-        subst = unify(node_ty, given_ty, {})
-        if subst is None:
-            raise GuppyTypeError(TypeMismatchError(node, node_ty, given_ty, "pattern"))
-        assert subst == {}
+        # node.cls, cls_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
+        # node_ty = self._synthesize_type(node.cls, cls_ty, False)
+        # subst = unify(node_ty, given_ty, {})
+        # if subst is None:
+        #     raise GuppyTypeError(TypeMismatchError(node, node_ty, given_ty, "pattern"))
+        # assert subst == {}
 
-        if len(node.patterns) > 0:
-            # We are considering `case Class(1,2,..)`.
-            # We need to check the constructor call.
-            # From the previous step, we know that `cls_ty` is a function type
-            assert isinstance(cls_ty, FunctionType)
+        # if len(node.patterns) > 0:
+        #     # We are considering `case Class(1,2,..)`.
+        #     # We need to check the constructor call.
+        #     # From the previous step, we know that `cls_ty` is a function type
+        #     assert isinstance(cls_ty, FunctionType)
 
-            check_num_args(len(cls_ty.inputs), len(node.patterns), node)
+        #     check_num_args(len(cls_ty.inputs), len(node.patterns), node)
 
-            for patt_arg, input_ty in zip(node.patterns, cls_ty.inputs, strict=True):
-                patt_arg = self.visit(patt_arg, input_ty.ty)
+        #     for patt_arg, input_ty in zip(node.patterns, cls_ty.inputs, strict=True):
+        #         patt_arg = self.visit(patt_arg, input_ty.ty)
 
         return node
 
