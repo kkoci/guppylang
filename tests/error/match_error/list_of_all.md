@@ -28,6 +28,7 @@ pattern =
 
 # MatchValue - MatchValue(expr value)
     case 42:               # OK (B, C)
+    case EnumName.Variant: # FORBIDDEN: Match bindings cannot shadow class variants 
 
 
 # MatchClass - MatchClass(expr cls, pattern* patterns) 
@@ -55,6 +56,7 @@ pattern =
 # MatchAs with binding 
     case x:                # NO FOR NOW
     case ClassName() as var: # NO FOR NOW
+    case Class:            # FORBIDDEN: Match bindings cannot shadow class variants -> check that the name is not a class variant
 
 
 # MatchOr OK
@@ -108,7 +110,7 @@ Making match work with generics
 How do we treat `as` statements with linear variables?
 
 
-## DONE CHECKs
+## DONE CHECK
 
 ```python
 @guppy.enum
@@ -167,7 +169,7 @@ def main(north: Enum[int], x:int) -> None:
 
 ```
 
-## TODO CHECKs 
+## TODO CHECK
 
 ```python
         case Point(x, y): # Error: value must be constants
@@ -175,7 +177,28 @@ def main(north: Enum[int], x:int) -> None:
 ```
 
 
-### Unreachable patterns
+```python
+
+# Example: linear variable used in multiple match arms (should error if not allowed)
+from guppylang import guppy
+
+@guppy.struct
+class Point:
+    x: qubit
+
+@guppy
+def main(p: Point) -> None:
+    match p:   # Got ERROR from p, it seems that p.x has been consumed here
+        case Point():
+            a = p.x
+        case Point():
+            b = p.x  
+
+main.check()
+
+```
+
+### Unreachable patterns 
 What do we do for unreachable patterns?
 In Python, from this:
 

@@ -351,7 +351,7 @@ class CFGBuilder(AstVisitor[BB | None]):
         assert len(node.cases) > 0
 
         case_bbs = []
-        pattern_nodes = []
+        pattern_nodes: list[ast.pattern] = []
         node.subject, bb = ExprBuilder.build(node.subject, self.cfg, bb)
         match_pred = MatchPred(node, node.subject, pattern_nodes)
         bb.branch_pred = match_pred
@@ -679,6 +679,7 @@ class PatternBuilder(AstVisitor[tuple[ast.pattern, BB]]):
         # we only support the wildcard pattern `_`
         if node.name is not None:
             self.generic_visit(node, bb)
+
         return node, bb
 
     def visit_MatchValue(self, node: ast.MatchValue, bb: BB) -> tuple[ast.pattern, BB]:

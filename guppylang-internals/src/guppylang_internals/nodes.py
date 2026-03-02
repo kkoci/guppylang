@@ -876,7 +876,7 @@ class MatchPred(ast.expr):
     ) -> None:
         # TODO: NICOLa, I save the parent in the super for error reporting purposes,
         # but all the checking and errors should be personalised for the match
-        # If you need this define the missing method manually refering to pattern
+        # If you need this define the missing method manually referring to pattern
         super().__init__(**match_node.__dict__)
         self.patterns = patterns
         self.subject = subject

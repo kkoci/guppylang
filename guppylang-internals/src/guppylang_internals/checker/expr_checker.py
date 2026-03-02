@@ -480,7 +480,9 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
                     raise InternalGuppyError(
                         "Valid variants should be available in `ctx.globals`"
                     )
-                return node, constr.ty.output
+                return with_loc(
+                    node, GlobalName(id=name, def_id=defn.id)
+                ), constr.ty.output
             # For types, we return their `__new__` constructor
             case TypeDef() as defn if constr := self.ctx.globals.get_instance_func(
                 defn, "__new__"
@@ -871,11 +873,11 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
     def visit_MatchPred(self, node: MatchPred) -> tuple[ast.expr, Type]:
         # TODO: NICOLA(3)
         node.subject, subj_ty = self.synthesize(node.subject)
-        cheked_patterns = []
+        checked_patterns = []
         for pattern in node.patterns:
             pattern = PatternChecker(self.ctx).check(pattern, subj_ty)
-            cheked_patterns.append(pattern)
-        node.patterns = cheked_patterns
+            checked_patterns.append(pattern)
+        node.patterns = checked_patterns
         return node, bool_type()
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> tuple[ast.expr, Type]:
@@ -913,11 +915,11 @@ class PatternChecker(AstVisitor[ast.pattern]):
         return with_type(given_ty, pattern)
         # return pattern
 
-    def _synthesize_type(self, node: ast.expr, ty: Type, value_expceted: bool) -> Type:
+    def _synthesize_type(self, node: ast.expr, ty: Type, value_expected: bool) -> Type:
         from guppylang_internals.definition.custom import CustomFunctionDef
 
         # self.ctx.globals[]
-        # If we have a fuction call we need to check that is a constructor
+        # If we have a function call we need to check that is a constructor
         got = ""
         if isinstance(ty, FunctionType):
             got = "a function call"
@@ -925,24 +927,107 @@ class PatternChecker(AstVisitor[ast.pattern]):
                 defn = ENGINE.get_parsed(node.def_id)
                 if isinstance(defn, CustomFunctionDef) and defn.is_constructor:
                     return ty.output
-        elif value_expceted:
+        elif value_expected:
             # if we are visiting a MatchValue pattern, we can also accept a value,
             # thus we return the type of the value
             return ty
 
         raise GuppyTypeError(ExpectedError(node, "a value or a class", got))
 
+    def _check_pattern_args(
+        self, pattern: ast.MatchClass, exp_arg_tys: list[Type]
+    ) -> ast.pattern:
+        check_num_args(len(exp_arg_tys), len(pattern.patterns), pattern)
+        for arg, exp_ty in zip(pattern.patterns, exp_arg_tys, strict=True):
+            arg = self.visit(arg, exp_ty)
+        return pattern
+
+    def visit_MatchAs(self, node: ast.MatchAs, given_ty: Type) -> ast.pattern:
+        # case _ had already been handled during CFG construction,
+        # we may have MatchAs pattern inside another pattern (for name binding)
+        # e.g case Class(x): -> pattern=MatchClass(..., patterns=MatchAs(name='x'))
+        if node.name is not None:
+            self.generic_visit(node, given_ty)
+
+        return node
+
     def visit_MatchValue(self, node: ast.MatchValue, given_ty: Type) -> ast.pattern:
+        if not isinstance(node.value, ast.Constant):
+            raise GuppyError(UnsupportedError(node.value, "TODO ERROR1", singular=True))
+
         node.value, val_ty = ExprSynthesizer(self.ctx).synthesize(node.value)
-        node_ty = self._synthesize_type(node.value, val_ty, True)
-        subst = unify(node_ty, given_ty, {})
+        subst = unify(val_ty, given_ty, {})
         if subst is None:
-            raise GuppyTypeError(TypeMismatchError(node, node_ty, given_ty, "pattern"))
+            raise GuppyTypeError(TypeMismatchError(node, val_ty, given_ty, "pattern"))
         assert subst == {}
 
         return node
 
     def visit_MatchClass(self, node: ast.MatchClass, given_ty: Type) -> ast.pattern:
+        match node.cls:
+            case ast.Attribute(value=ast.Name(), attr=attr):
+                node.cls.value, value_ty = ExprSynthesizer(self.ctx).synthesize(
+                    node.cls.value
+                )
+
+                if not isinstance(value_ty, EnumType):
+                    raise GuppyTypeError(
+                        ExpectedError(
+                            node.cls.value, "an enum class", got="TODO ERROR2"
+                        )
+                    )
+
+                subst = unify(value_ty, given_ty, {})
+                if subst is None:
+                    raise GuppyTypeError(
+                        TypeMismatchError(node, given_ty, value_ty, "pattern")
+                    )
+
+                if attr not in value_ty.variant_as_dict:
+                    # TODO: NICola, see if merging this code with above
+                    span = to_span(node)
+                    if span.start.line == span.end.line:
+                        attr_span = Span(span.end.shift_left(len(attr) + 2), span.end)
+                    else:
+                        attr_span = span
+                    raise GuppyTypeError(
+                        AttributeNotFoundError(attr_span, value_ty, attr)
+                    )
+
+                node = self._check_pattern_args(
+                    node, [f.ty for f in value_ty.variant_as_dict[attr].fields]
+                )
+
+            case ast.Name() as name:
+                class_def = self.ctx.globals[name.id]
+                from guppylang_internals.definition.struct import ParsedStructDef
+
+                if not isinstance(class_def, ParsedStructDef):
+                    raise GuppyTypeError(
+                        ExpectedError(node.cls, "a struct class", got="TODO ERROR4")
+                    )
+                if class_def.id != given_ty.defn.id:
+                    _, node_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
+                    raise GuppyTypeError(
+                        TypeMismatchError(node, node_ty, given_ty, "pattern")
+                    )
+
+                assert isinstance(given_ty, StructType)
+                node = self._check_pattern_args(node, [f.ty for f in given_ty.fields])
+
+                # node.cls, cls_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
+                # if not isinstance(cls_ty, StructType):
+                #     raise GuppyTypeError(
+                #         ExpectedError(node.cls, "a struct class", got="TODO ERROR4")
+                #     )
+
+                # node = self._check_pattern_args(node, [f.ty for f in cls_ty.fields])
+
+            case _:
+                raise GuppyError(
+                    ExpectedError(node, "a value or a class (TODO ERROR3)")
+                )
+
         node.cls, cls_ty = ExprSynthesizer(self.ctx).synthesize(node.cls)
         node_ty = self._synthesize_type(node.cls, cls_ty, False)
         subst = unify(node_ty, given_ty, {})
@@ -953,7 +1038,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
         if len(node.patterns) > 0:
             # We are considering `case Class(1,2,..)`.
             # We need to check the constructor call.
-            # From the prevous step, we know that `cls_ty` is a function type
+            # From the previous step, we know that `cls_ty` is a function type
             assert isinstance(cls_ty, FunctionType)
 
             check_num_args(len(cls_ty.inputs), len(node.patterns), node)
@@ -962,15 +1047,6 @@ class PatternChecker(AstVisitor[ast.pattern]):
                 patt_arg = self.visit(patt_arg, input_ty.ty)
 
         return node
-
-    def visit_MatchAs(self, node: ast.MatchAs, given_ty: Type) -> NoReturn:
-        # case _ had already been handled during CFG construction,
-        # we may have MatchAs pattern inside another pattern (for name binding)
-        # e.g case Class(x): -> pattern=MatchClass(..., patterns=MatchAs(name='x'))
-        if node.pattern is not None or node.name is not None:
-            self.generic_visit(node, given_ty)
-        else:
-            raise InternalGuppyError("TODOOOOOOOO")
 
     def generic_visit(self, node: ast.pattern, given_ty: Type) -> NoReturn:
         """Called if no explicit visitor function exists for a node."""

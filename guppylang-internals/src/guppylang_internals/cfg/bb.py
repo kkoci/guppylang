@@ -99,7 +99,7 @@ class BB(ABC):
             visitor.visit(s)
         if self.branch_pred is not None:
             # TODO: NICOLA(F) Check this for match statements as well.
-            # Not needed now, since we are not considering field acess
+            # Not needed now, since we are not considering field access
             visitor.visit(self.branch_pred)
         self._vars = visitor.stats
         return visitor.stats
