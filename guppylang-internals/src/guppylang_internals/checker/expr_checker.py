@@ -969,7 +969,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
         node.value, val_ty = ExprSynthesizer(self.ctx).synthesize(node.value)
         subst = unify(val_ty, given_ty, {})
         if subst is None:
-            raise GuppyTypeError(TypeMismatchError(node, val_ty, given_ty, "pattern"))
+            raise GuppyTypeError(TypeMismatchError(node, given_ty, val_ty, "pattern"))
         assert subst == {}
 
         return node

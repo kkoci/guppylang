@@ -739,7 +739,6 @@ class EnumType(ParametrizedTypeBase):
         from guppylang_internals.tys.subst import Instantiator
 
         inst = Instantiator(self.args)
-
         # Ensure that the order is consistent
         variants_list = sorted(self.defn.variants.values(), key=lambda v: v.index)
         return [
@@ -754,7 +753,19 @@ class EnumType(ParametrizedTypeBase):
     @cached_property
     def variant_as_dict(self) -> Mapping[str, "EnumVariant[CheckedField]"]:
         """The mapping from variant names to variants of this enum type."""
-        return self.defn.variants
+        from guppylang_internals.definition.enum import EnumVariant
+        from guppylang_internals.definition.util import CheckedField
+        from guppylang_internals.tys.subst import Instantiator
+
+        inst = Instantiator(self.args)
+        return {
+            name: EnumVariant(
+                variant.index,
+                variant.name,
+                [CheckedField(f.name, f.ty.transform(inst)) for f in variant.fields],
+            )
+            for name, variant in self.defn.variants.items()
+        }
 
     @cached_property
     def intrinsically_copyable(self) -> bool:
