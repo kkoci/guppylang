@@ -233,8 +233,7 @@ def check_bb(
     checked_stmts = StmtChecker(ctx, bb, return_ty).check_stmts(bb.statements)
 
     # If we branch, we also have to check the branch predicate
-    if len(bb.successors) > 1:
-        assert bb.branch_pred is not None
+    if bb.branch_pred is not None:
         bb.branch_pred, ty = ExprSynthesizer(ctx).synthesize(bb.branch_pred)
         bb.branch_pred, _ = to_bool(bb.branch_pred, ty, ctx)
 
