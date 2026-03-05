@@ -25,6 +25,7 @@ from guppylang_internals.checker.expr_checker import ExprSynthesizer, to_bool
 from guppylang_internals.checker.stmt_checker import StmtChecker
 from guppylang_internals.diagnostic import Error, Note
 from guppylang_internals.error import GuppyError
+from guppylang_internals.nodes import MatchPred
 from guppylang_internals.tys.param import Parameter
 from guppylang_internals.tys.ty import InputFlags, Type
 
@@ -249,7 +250,11 @@ def check_bb(
                     # informative error message
                     if x in cfg.maybe_ass_before[use_bb]:
                         err: Error = VarMaybeNotDefinedError(use_bb.vars.used[x], x)
-                        if bad_branch := diagnose_maybe_undefined(use_bb, x, cfg):
+                        # TODO: NIcola with match case does not make sense to have the
+                        # suggestion
+                        if not isinstance(bb.branch_pred, MatchPred) and (
+                            bad_branch := diagnose_maybe_undefined(use_bb, x, cfg)
+                        ):
                             branch_expr, truth_value = bad_branch
                             note = VarMaybeNotDefinedError.BadBranch(
                                 branch_expr, x, truth_value

@@ -952,7 +952,9 @@ def check_cfg_linearity(
                     if consumed_succs:
                         assert bb.branch_pred is not None
                         # TODO: NICOLa(F): consider improving
-                        if len(bb.successors) == 2:
+                        if len(bb.successors) == 2 and not isinstance(
+                            bb.branch_pred, MatchPred
+                        ):
                             [left_succ, _] = bb.successors
                             err.add_sub_diagnostic(
                                 PlaceNotUsedError.Branch(
