@@ -510,9 +510,6 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
     def visit_Attribute(self, node: ast.Attribute) -> tuple[ast.expr, Type]:
         from guppylang.defs import GuppyDefinition
 
-        # TODO: NICOLa clear this stuff
-        # from guppylang_internals.engine import ENGINE
-
         attr_span = build_attr_span(node)
         if module := self._is_python_module(node.value):
             if node.attr in module.__dict__:
@@ -866,16 +863,18 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
     def visit_MatchPred(self, node: MatchPred) -> tuple[ast.expr, Type]:
         # TODO: NICOLa(F): what other types we support here? arrays? Option?
         node.subject, subj_ty = self.synthesize(node.subject)
-        if not isinstance(subj_ty, (StructType, EnumType)):
-            raise GuppyError(
-                UnsupportedError(node.subject, f"Pattern matching on {subj_ty}", True)
-            )
-        checked_patterns = []
-        for pattern in node.patterns:
-            pattern = PatternChecker(self.ctx).check(pattern, subj_ty)
-            checked_patterns.append(pattern)
-        node.patterns = checked_patterns
-        return node, bool_type()
+        if isinstance(subj_ty, (StructType, EnumType, NumericType)) or (
+            isinstance(subj_ty, OpaqueType) and subj_ty.defn.name in ["bool", "str"]
+        ):
+            checked_patterns = []
+            for pattern in node.patterns:
+                pattern = PatternChecker(self.ctx).check(pattern, subj_ty)
+                checked_patterns.append(pattern)
+            node.patterns = checked_patterns
+            return node, bool_type()
+        raise GuppyError(
+            UnsupportedError(node.subject, f"Pattern matching on {subj_ty}", True)
+        )
 
     def visit_NamedExpr(self, node: ast.NamedExpr) -> tuple[ast.expr, Type]:
         raise InternalGuppyError(
@@ -912,7 +911,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
         return with_type(exp_ty, pattern)
         # return pattern
 
-    def _check_class_type(
+    def _get_class_def(
         self, node: ast.Name, class_type: str
     ) -> "ParsedDef | PythonObject":
         """Checks that the given node corresponds to a global class definition."""
@@ -930,12 +929,9 @@ class PatternChecker(AstVisitor[ast.pattern]):
     ) -> None:
         """Checks that the given definition corresponds to the given type,
         by comparing the IDs"""
-        if not isinstance(exp_ty, (StructType, EnumType)):
-            raise InternalGuppyError(
-                "Only supported types should reach `_check_def_against_type`"
-                " in pattern checking"
-            )
-        if defn.id != exp_ty.defn.id:
+        if not (
+            isinstance(exp_ty, (StructType, EnumType)) and defn.id == exp_ty.defn.id
+        ):
             from guppylang_internals.definition.enum import ParsedEnumDef
             from guppylang_internals.definition.struct import ParsedStructDef
 
@@ -984,7 +980,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
                 from guppylang_internals.definition.enum import ParsedEnumDef
 
                 assert isinstance(node.cls.value, ast.Name)
-                class_def = self._check_class_type(node.cls.value, "enum")
+                class_def = self._get_class_def(node.cls.value, "enum")
 
                 # Only enums can be matched with attribute syntax
                 if not isinstance(class_def, ParsedEnumDef):
@@ -1007,7 +1003,7 @@ class PatternChecker(AstVisitor[ast.pattern]):
             case ast.Name():
                 from guppylang_internals.definition.struct import ParsedStructDef
 
-                class_def = self._check_class_type(node.cls, "struct")
+                class_def = self._get_class_def(node.cls, "struct")
                 # We allow matching against a struct using the class name syntax
                 if not isinstance(class_def, ParsedStructDef):
                     raise GuppyTypeError(

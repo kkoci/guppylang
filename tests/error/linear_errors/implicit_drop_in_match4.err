@@ -1,0 +1,10 @@
+Error: Drop violation (at $FILE:14:12)
+   | 
+12 |     match p:
+13 |         case Point(3, _):
+14 |             q = qubit()  # ERROR: q created but not consumed before arm ends
+   |             ^ Variable `q` with non-droppable type `qubit` is leaked
+
+Help: Make sure that `q` is consumed or returned to avoid the leak
+
+Guppy compilation failed due to 1 previous error

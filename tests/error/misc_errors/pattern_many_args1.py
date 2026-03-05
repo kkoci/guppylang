@@ -12,5 +12,3 @@ def main(p: Point, x: int) -> None:
             z = 66
 
 main.check()
-
-# TODO: NICOLA do the same for enums

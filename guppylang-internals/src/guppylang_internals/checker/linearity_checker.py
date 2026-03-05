@@ -716,7 +716,6 @@ class BBLinearityChecker(ast.NodeVisitor):
                 self._reassign_single_inout_arg(var, var.defined_at or use)
 
     def visit_MatchPred(self, node: MatchPred) -> None:
-        # TODO: NICOLA(2) - Implement linearity checking for pattern matching
         # For now, we just check the subject, the guards is not supported and
         # the patterns does not contain any places (alias are not supported)
         subj_ty = get_type(node.subject)
@@ -952,7 +951,7 @@ def check_cfg_linearity(
                                 consumed_succs.add(succ)
                     if consumed_succs:
                         assert bb.branch_pred is not None
-                        # TODO: NICOLa(F): consider doingn
+                        # TODO: NICOLa(F): consider improving
                         if len(bb.successors) == 2:
                             [left_succ, _] = bb.successors
                             err.add_sub_diagnostic(

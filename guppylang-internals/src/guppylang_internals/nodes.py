@@ -845,23 +845,6 @@ class CheckedModifiedBlock(ast.With):
         return len(self.power) > 0
 
 
-# TODO: NICOLa, is this really necessary?
-class MatchSubject(ast.expr):
-    """A Node representing the subject of a match statement."""
-
-    subject: ast.expr
-
-    _fields = ("subject",)
-
-    def __init__(self, subject: ast.expr) -> None:
-        super().__init__(**subject.__dict__)
-        self.subject = subject
-
-    # See MakeIter for explanation
-    __reduce__ = object.__reduce__
-    __reduce_ex__ = object.__reduce_ex__
-
-
 class MatchPred(ast.expr):
     """A Node representing the condition of one case in the match statement."""
 

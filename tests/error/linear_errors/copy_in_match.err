@@ -1,0 +1,17 @@
+Error: Copy violation (at $FILE:11:9)
+   | 
+ 9 | 
+10 | @compile_guppy
+11 | def main(p: Point) -> None:
+   |          ^^^^^^^^ Borrowed argument p cannot be returned to the caller ...
+
+Note:
+   | 
+13 |         case Point(_, _):
+14 |             b = p.x
+   |                 --- since `p.x` with non-copyable type `qubit` was already moved
+   |                     here
+
+Help: Consider writing a value back into `p.x` before returning
+
+Guppy compilation failed due to 1 previous error
