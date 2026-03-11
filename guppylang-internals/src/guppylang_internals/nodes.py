@@ -902,7 +902,10 @@ class MatchStruct(ast.pattern):
 
 class MatchLiteral(ast.pattern):
     """A Node representing a checked pattern match on a literal value
-    against a list of patterns"""
+    against a list of patterns
+
+    equality_function is the DefId of the equality function to use for comparing the
+    literal value with the subject."""
 
     value: ast.expr
     equality_function: "DefId"

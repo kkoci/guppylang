@@ -23,6 +23,7 @@ from guppylang_internals.compiler.core import (
 )
 from guppylang_internals.compiler.expr_compiler import ExprCompiler
 from guppylang_internals.compiler.stmt_compiler import StmtCompiler
+from guppylang_internals.nodes import MatchPred
 from guppylang_internals.std._internal.compiler.tket_bool import OpaqueBool, read_bool
 from guppylang_internals.tys.ty import type_to_row
 
@@ -104,20 +105,38 @@ def compile_bb(
     dfg = StmtCompiler(ctx).compile_stmts(bb.statements, dfg)
 
     # If we branch, we also have to compile the branch predicate
-    if len(bb.successors) > 1:
+    if len(bb.successors) == 2:
+        # we are branching under an if then else,
+        # or under a match statement with 1 case + else
         assert bb.branch_pred is not None
         branch_port = ExprCompiler(ctx).compile(bb.branch_pred, dfg)
+        print(branch_port)
         # Convert the bool predicate into a sum for branching.
         pred_ty = builder.hugr.port_type(branch_port.out_port())
-        assert pred_ty == OpaqueBool
-        branch_port = dfg.builder.add_op(read_bool(), branch_port)
-        branch_port = cast("Wire", branch_port)
+        # assert pred_ty == OpaqueBool
+        if pred_ty == OpaqueBool:
+            branch_port = dfg.builder.add_op(
+                read_bool(),
+                branch_port,  # Here happen the tagging
+            )
+            branch_port = cast("Wire", branch_port)
+        else:
+            assert pred_ty == ht.Bool, f"Unexpected predicate type: {pred_ty}"
+    elif len(bb.successors) > 2:
+        # we are branching under a match statement with >1 cases
+        assert isinstance(bb.branch_pred, MatchPred)
+        branch_port = ExprCompiler(ctx).compile(bb.branch_pred, dfg)
+        exit(0)
     else:
         # Even if we don't branch, we still have to add a `Sum(())` predicates
         branch_port = dfg.builder.add_op(ops.Tag(0, ht.UnitSum(1)))
 
     # Finally, we have to add the block output.
     outputs: Sequence[Place]
+    # print("out of node:", bb)
+    # for r in bb.sig.output_rows:
+    #     print([out.name for out in r])
+    # print("---")
     if len(bb.successors) == 1:
         # The easy case is if we don't branch: We just output all variables that are
         # specified by the signature

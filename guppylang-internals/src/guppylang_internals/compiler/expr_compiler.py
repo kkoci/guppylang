@@ -50,6 +50,7 @@ from guppylang_internals.nodes import (
     GlobalName,
     LocalCall,
     MatchLiteral,
+    MatchPred,
     PartialApply,
     PlaceNode,
     StateResultExpr,
@@ -748,8 +749,101 @@ class ExprCompiler(CompilerBase, AstVisitor[Wire]):
     def visit_Compare(self, node: ast.Compare) -> Wire:
         raise InternalGuppyError("Node should have been removed during type checking.")
 
+    def visit_MatchPred(self, node: MatchPred) -> Wire:
+        subject_wire = self.visit(node.subject)
+        if len(node.patterns) == 0:
+            raise InternalGuppyError(
+                "Match predicate with no patterns should not exist"
+            )
+            # if (
+            #     len(node.patterns) == 1
+            #     or (
+            #         len(node.patterns) == 2
+            #         and isinstance(node.patterns[1], ast.MatchAs)
+            #         and node.patterns[1].name is None
+            #     )
+            # ):
+            # In this case we can compile directly the single pattern
+            # and return the result (a boolean wire)
+            # return PatternCompiler(self.ctx).compile(node.patterns[0], self.dfg, wire)
+
+        print(len(node.patterns))
+        cond = self._build_conditional_for_pattern(node.patterns, subject_wire)
+        return cond
+
+    def _build_conditional_for_pattern(
+        self, patterns: list[ast.pattern], wire: Wire, tag_index=0
+    ) -> Wire:
+        """Helper method to build a nested `Conditional` representing
+        the pattern match"""
+
+        # TODO: NICOLA(00) - This return is not good
+        if len(patterns) == 0:
+            return wire
+
+        [pattern, *patterns] = patterns
+        # this wire comes from the check if the subject against the pattern
+        is_pattern_wire = PatternCompiler(self.ctx).compile(pattern, self.dfg, wire)
+
+        is_pattern_wire = self.builder.add_op(
+            read_bool(),
+            is_pattern_wire,  # Here happen the tagging
+        )
+        port_type = self.builder.hugr.port_type(is_pattern_wire.out_port())
+        assert port_type == ht.Bool
+        with self.builder.add_conditional(
+            is_pattern_wire,
+        ) as conditional:
+            with conditional.add_case(0) as case:
+                tag = case.add_op(ops.Tag(0, port_type))
+                case.set_outputs(tag)
+
+            with conditional.add_case(1) as case:
+                inner_cond = self._build_conditional_for_pattern(
+                    patterns, wire, tag_index + 1
+                )
+                case.set_outputs(inner_cond)
+                # match port_type:
+                #     case ht.Bool:
+                #         with conditional.add_case(i) as case:
+                #             tag = case.add_op(ops.Tag(i, port_type))
+                #             case.set_outputs(tag)
+                #     case ht.Sum():
+                #         pass
+                #     case _:
+                #         assert_never(is_pattern_wire)
+        return conditional.out(0)
+
+
+class PatternCompiler(CompilerBase, AstVisitor[Wire]):
+    """A compiler for patterns to Hugr"""
+
+    dfg: DFContainer
+    subj_wire: Wire
+
+    def compile(self, pattern: ast.pattern, dfg: DFContainer, subj_wire: Wire) -> Wire:
+        self.dfg = dfg
+        self.subj_wire = subj_wire
+        return self.visit(pattern)
+
     def visit_MatchLiteral(self, node: MatchLiteral) -> Wire:
-        raise InternalGuppyError("TODDOOOOO")
+        # Get the compiled equality function
+        eq_func, rem_args = self.ctx.build_compiled_def(
+            node.equality_function, type_args=[]
+        )
+
+        # Compile the literal value to a wire
+        value_wire = ExprCompiler(self.ctx).compile(node.value, self.dfg)
+
+        assert isinstance(eq_func, CompiledCallableDef)
+
+        # Call the equality function with subject and literal value
+        args = [self.subj_wire, value_wire]
+        rets = eq_func.compile_call(args, rem_args, self.dfg, self.ctx, node)
+
+        # The equality function returns a boolean indicating if they're equal
+        assert len(rets.regular_returns) == 1
+        return rets.regular_returns[0]
 
 
 def expr_to_row(expr: ast.expr) -> list[ast.expr]:
