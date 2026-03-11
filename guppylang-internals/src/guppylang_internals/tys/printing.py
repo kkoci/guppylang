@@ -169,3 +169,25 @@ def signature_to_str(name: str, sig: FunctionType, has_var_args: bool = False) -
     )
     s += ", ..." if has_var_args else ""
     return s + ") -> " + str(sig.output)
+
+def type_kind_str(ty: Type) -> str:
+    """Returns the kind name of a type, without type arguments.
+
+    Unlike ``str(ty)``, which includes full type parameters, this returns only
+    the constructor name (e.g. ``'Tuple'`` for ``(Point, int)``, ``'list'`` for
+    ``list[int]``, ``'Callable'`` for a function type).
+    """
+    match ty:
+        case TupleType():
+            return "Tuple"
+        case OpaqueType() | StructType() | EnumType():
+            return ty.defn.name
+        case FunctionType():
+            return "Callable"
+        case NumericType():
+            return ty.kind.name.lower()
+        case NoneType():
+            return "None"
+        case _:
+            # BoundTypeVar / ExistentialTypeVar — fall back to full str
+            return str(ty)

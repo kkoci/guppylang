@@ -100,6 +100,17 @@ class TypeBase(ToHugr[ht.Type], Transformable["Type"], ABC):
         # We use a custom printer that takes care of inserting parentheses and choosing
         # unique names
         return TypePrinter().visit(cast("Type", self))
+    
+    def kind_str(self) -> str:
+        """Returns the kind name of this type, without type arguments.
+
+        Unlike ``__str__``, which includes full type parameters, this returns
+        only the constructor name (e.g. ``'Tuple'`` for ``(Point, int)``,
+        ``'list'`` for ``list[int]``).
+        """
+        from guppylang_internals.tys.printing import type_kind_str
+        
+        return type_kind_str(cast("Type", self))
 
 
 @dataclass(frozen=True)
@@ -668,6 +679,14 @@ class OpaqueType(ParametrizedTypeBase):
     def cast(self) -> "Type":
         """Casts an implementor of `TypeBase` into a `Type`."""
         return self
+    
+    def kind_str(self) -> str:
+        """Returns the full string representation, including type arguments.
+
+        For ``OpaqueType``, ``__str__`` already gives a concise kind description
+        (e.g. ``'list[int]'``), so we use it directly.
+        """
+        return str(self)
 
     def to_hugr(self, ctx: ToHugrContext) -> ht.Type:
         """Computes the Hugr representation of the type."""
