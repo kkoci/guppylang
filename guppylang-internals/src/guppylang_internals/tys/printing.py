@@ -189,5 +189,4 @@ def type_kind_str(ty: Type) -> str:
         case NoneType():
             return "None"
         case _:
-            # BoundTypeVar / ExistentialTypeVar — fall back to full str
             return str(ty)

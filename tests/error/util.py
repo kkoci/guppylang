@@ -58,7 +58,7 @@ def run_error_test(file, capsys, snapshot):
     # so we try to predict the wrapping points to be able to build a replacement regex.
     wasm_module = get_wasm_file()
     wrapped_wasm = wrap(f"`{wasm_module}`", DiagnosticsRenderer.MAX_MESSAGE_LINE_LEN)
-    err = err.replace("\n".join(wrapped_wasm), "`$WASM`") 
+    err = re.sub("\n".join(wrapped_wasm), "`$WASM`", err)
     # Strip the bootstrap included in the traceback by Python 3.13+ for parallel tests
     err = filter_traceback_not_containing(err, EXECNET_BOOTSTRAP)
     # Strip the error markers that are only present for Python 3.11+

@@ -102,11 +102,12 @@ class TypeBase(ToHugr[ht.Type], Transformable["Type"], ABC):
         return TypePrinter().visit(cast("Type", self))
     
     def kind_str(self) -> str:
-        """Returns the kind name of this type, without type arguments.
+        """Returns a short, human-readable kind name for this type.
 
-        Unlike ``__str__``, which includes full type parameters, this returns
-        only the constructor name (e.g. ``'Tuple'`` for ``(Point, int)``,
-        ``'list'`` for ``list[int]``).
+        For most types this is the constructor name without arguments
+        (e.g. ``'Tuple'`` for ``(Point, int)``, ``'Callable'`` for a function
+        type). Subtypes may include type arguments when that gives a more
+        useful description.
         """
         from guppylang_internals.tys.printing import type_kind_str
         
