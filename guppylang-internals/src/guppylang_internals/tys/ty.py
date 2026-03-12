@@ -682,10 +682,11 @@ class OpaqueType(ParametrizedTypeBase):
         return self
     
     def kind_str(self) -> str:
-        """Returns the full string representation, including type arguments.
+        """Returns a short, human-readable kind name for this type.
 
-        For ``OpaqueType``, ``__str__`` already gives a concise kind description
-        (e.g. ``'list[int]'``), so we use it directly.
+        For ``OpaqueType``, ``__str__`` already gives a concise description
+        (e.g. ``'list[int]'``), so we use it directly rather than routing
+        through ``type_kind_str``.
         """
         return str(self)
 

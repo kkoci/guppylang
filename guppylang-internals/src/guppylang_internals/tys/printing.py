@@ -180,8 +180,12 @@ def type_kind_str(ty: Type) -> str:
     match ty:
         case TupleType():
             return "Tuple"
-        case OpaqueType() | StructType() | EnumType():
-            return ty.defn.name
+        case OpaqueType():
+            raise AssertionError("type_kind_str should never be called with OpaqueType")
+        case StructType():
+            return "Struct"
+        case EnumType():
+            return "Enum"
         case FunctionType():
             return "Callable"
         case NumericType():
