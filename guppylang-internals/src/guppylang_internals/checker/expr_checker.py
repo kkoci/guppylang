@@ -872,7 +872,8 @@ class ExprSynthesizer(AstVisitor[tuple[ast.expr, Type]]):
             isinstance(subj_ty, OpaqueType) and subj_ty.defn.name == "bool"
         ):
             raise GuppyError(
-                UnsupportedError(node.subject, f"Pattern matching on {subj_ty.kind_str()}", True)
+                UnsupportedError(node.subject,
+                f"Pattern matching on {subj_ty.kind_str()}", True)
             )
         checked_patterns = []
         for pattern in node.patterns:

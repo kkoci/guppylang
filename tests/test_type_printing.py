@@ -13,7 +13,7 @@ from guppylang_internals.tys.ty import (
 )
 
 
-def test_generic_function_type():
+def test_generic_function_type() -> None:
     ty_param = TypeParam(0, "T", must_be_copyable=False, must_be_droppable=False)
     len_param = ConstParam(1, "n", NumericType(NumericType.Kind.Nat))
     array_ty = OpaqueType([ty_param.to_bound(0), len_param.to_bound(1)], array_type_def)
@@ -25,7 +25,7 @@ def test_generic_function_type():
     assert str(ty) == "forall T, n: nat. array[T, n] -> T"
 
 
-def test_comptime_function_type():
+def test_comptime_function_type() -> None:
     ty_param = TypeParam(0, "T", must_be_copyable=False, must_be_droppable=False)
     ty = FunctionType(
         inputs=[FuncInput(NumericType(NumericType.Kind.Nat), InputFlags.Comptime)],
@@ -35,7 +35,7 @@ def test_comptime_function_type():
     assert str(ty) == "forall T. nat @comptime -> T"
 
 
-def test_kind_str():
+def test_kind_str() -> None:
     # NoneType -> str(self) = "None"
     assert NoneType().kind_str() == "None"
 

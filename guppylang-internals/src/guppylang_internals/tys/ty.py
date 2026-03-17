@@ -100,7 +100,7 @@ class TypeBase(ToHugr[ht.Type], Transformable["Type"], ABC):
         # We use a custom printer that takes care of inserting parentheses and choosing
         # unique names
         return TypePrinter().visit(cast("Type", self))
-    
+
     @abstractmethod
     def kind_str(self) -> str:
         """Returns a short, human-readable kind name for this type.
@@ -696,7 +696,7 @@ class OpaqueType(ParametrizedTypeBase):
     def cast(self) -> "Type":
         """Casts an implementor of `TypeBase` into a `Type`."""
         return self
-    
+
     def kind_str(self) -> str:
         return str(self)
 
